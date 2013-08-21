@@ -19,8 +19,6 @@ using namespace std;
 #include <xcb/xcb_keysyms.h>
 #include <X11/keysym.h>
 
-typedef vector<string> cmd_list_t;
-
 typedef struct {
     xcb_connection_t* conn;
     xcb_screen_t*     scrn;
@@ -72,9 +70,12 @@ private:
 
 } xcb_context_t;
 
-static const char* _myname = nullptr;
 static xcb_context_t _xcbctx;
+
+static const char* _myname = nullptr;
 static unordered_map<xcb_keycode_t, uint32_t> _codemap;
+
+typedef vector<string> cmd_list_t;
 static cmd_list_t _cmds;
 
 auto dbpath() -> string
@@ -209,9 +210,9 @@ auto help(int, char**) -> void
 {
     cout << "Usage: " << endl;
     cout << _myname << endl;
-    cout << "    show menu" << endl;
+    cout << "    Show menu on top of screen." << endl;
     cout << _myname << " update <path1> <path2> ..." << endl;
-    cout << "    update database" << endl;
+    cout << "    Update database, <path> is optional." << endl;
 }
 
 struct bar_ctx_t {
