@@ -19,7 +19,60 @@ using namespace std;
 #include <xcb/xcb_keysyms.h>
 #include <X11/keysym.h>
 
-typedef struct {
+static const char* _myname = nullptr;
+
+/*
+ * command list
+ */
+typedef vector<string> cmd_list_t;
+static cmd_list_t _cmds;
+
+auto dbpath() -> string
+{
+    auto path = scx::Env::Get("HOME") + "/";
+    auto dir = path + ".cache/";
+    auto info = scx::FileInfo(dir);
+    if (info.Exists()) {
+        if (info.Type() != scx::FileType::Directory)
+            return "";
+    } else {
+        scx::Dir::MakeDir(dir, 0644);
+    }
+    path = dir + "mrulauncher.txt";
+    return path;
+}
+
+auto loaddb() -> cmd_list_t
+{
+    fstream db;
+    vector<string> dbfiles;
+
+    stringstream ss;
+    db.open(dbpath().c_str(), ios::in);
+    if (db) {
+        ss << db.rdbuf();
+    }
+    db.close();
+    dbfiles = scx::String::Split(ss.str(), '\n');
+
+    return dbfiles;
+}
+
+auto savedb(const cmd_list_t& list) -> void
+{
+    fstream db;
+    db.open(dbpath().c_str(), ios::out);
+    for (const auto& file: list) {
+        db << file << endl;
+    }
+    db.close();
+}
+
+/*
+ * xcb context
+ */
+struct xcb_context_t
+{
     xcb_connection_t* conn;
     xcb_screen_t*     scrn;
     xcb_window_t      win;
@@ -68,154 +121,15 @@ typedef struct {
 private:
     xcb_window_t focus;
 
-} xcb_context_t;
+};
 
 static xcb_context_t _xcbctx;
 
-static const char* _myname = nullptr;
-static unordered_map<xcb_keycode_t, uint32_t> _codemap;
-
-typedef vector<string> cmd_list_t;
-static cmd_list_t _cmds;
-
-auto dbpath() -> string
+/*
+ * menu bar context
+ */
+struct bar_ctx_t
 {
-    auto path = scx::Env::Get("HOME") + "/";
-    auto dir = path + ".cache/";
-    auto info = scx::FileInfo(dir);
-    if (info.Exists()) {
-        if (info.Type() != scx::FileType::Directory)
-            return "";
-    } else {
-        scx::Dir::MakeDir(dir, 0644);
-    }
-    path = dir + "mrulauncher.txt";
-    return path;
-}
-
-auto loaddb() -> cmd_list_t
-{
-    fstream db;
-    vector<string> dbfiles;
-
-    stringstream ss;
-    db.open(dbpath().c_str(), ios::in);
-    if (db) {
-        ss << db.rdbuf();
-    }
-    db.close();
-    dbfiles = scx::String::Split(ss.str(), '\n');
-
-    return dbfiles;
-}
-
-auto savedb(const cmd_list_t& list) -> void
-{
-    fstream db;
-    db.open(dbpath().c_str(), ios::out);
-    for (const auto& file: list) {
-        db << file << endl;
-    }
-    db.close();
-}
-
-auto update(int narg, char** args) -> void
-{
-    vector<string> paths;
-
-    /* setup search path */
-    {
-        paths.reserve(narg);
-        for (int i = 0; i < narg; ++i) {
-            paths.push_back(args[i]);
-        }
-        if (paths.empty()) {
-            const auto& envpath = scx::Env::Get("PATH");
-            paths = scx::String::Split(envpath, ':');
-        }
-        std::sort(paths.begin(), paths.end());
-        paths.erase(std::unique(paths.begin(), paths.end()), paths.end());
-    }
-
-    vector<string> newfiles;
-    newfiles.reserve(999);
-
-    /* search newfiles */
-    {
-        string msg = "Search in following directories:";
-        cout << msg << endl;
-        for (size_t i = 0; i < paths.size(); ++i) {
-            const auto& path = paths[i];
-            cout << path << endl;
-            scx::Dir::WalkDir(
-                path, 
-                [&newfiles, &path] (const string& name) { 
-                    if (name != "." && name != "..") {
-                        newfiles.push_back(name);
-                    }
-                }
-            );
-        }
-        cout << string(msg.size(), '-') << endl;
-    }
-
-    /* update database */
-    {
-        string msg = "Statistics:";
-        cout << msg << endl;
-
-        auto dbfiles = loaddb();
-
-        // drop obsolete
-        int ndec = 0;
-        set<string> fileset;
-        for (const auto& file: newfiles) {
-            fileset.insert(file);
-        }
-        auto pos = std::remove_if(
-            dbfiles.begin(), dbfiles.end(),
-            [&fileset, &ndec](const string& file) {
-                if (fileset.find(file) == fileset.end()) {
-                    ++ndec;
-                    return true;
-                }
-                return false;
-            }
-        );
-        dbfiles.erase(pos, dbfiles.end());
-
-        // append new
-        int ninc = 0;
-        fileset.clear();
-        for (const auto& file: dbfiles) {
-            fileset.insert(file);
-        }
-        for (const auto& file: newfiles) {
-            if (fileset.find(file) == fileset.end()) {
-                dbfiles.push_back(file);
-                ++ninc;
-            }
-        }
-
-        savedb(dbfiles);
-
-        cout << "+ " << ninc << endl;
-        cout << "- " << ndec << endl;
-        cout << "= " << dbfiles.size() << endl;
-        cout << string(msg.size(), '-') << endl;
-    }
-}
-
-auto help(int, char**) -> void
-{
-    cout << "Usage: " << endl;
-    cout << _myname << endl;
-    cout << "    Show menu on top of screen." << endl;
-    cout << _myname << " update <path1> <path2> ..." << endl;
-    cout << "    Update database, <path> is optional." << endl;
-}
-
-struct bar_ctx_t {
     // buffer
     auto data() const -> const char*
     {
@@ -341,6 +255,116 @@ private:
 };
 
 static bar_ctx_t _barctx;
+
+/*
+ * usage: mrulauncher update
+ *
+ */
+auto update(int narg, char** args) -> void
+{
+    vector<string> paths;
+
+    // setup search path
+    {
+        paths.reserve(narg);
+        for (int i = 0; i < narg; ++i) {
+            paths.push_back(args[i]);
+        }
+        if (paths.empty()) {
+            const auto& envpath = scx::Env::Get("PATH");
+            paths = scx::String::Split(envpath, ':');
+        }
+        std::sort(paths.begin(), paths.end());
+        paths.erase(std::unique(paths.begin(), paths.end()), paths.end());
+    }
+
+    vector<string> newfiles;
+    newfiles.reserve(999);
+
+    // search newfiles
+    {
+        string msg = "Search in following directories:";
+        cout << msg << endl;
+        for (size_t i = 0; i < paths.size(); ++i) {
+            const auto& path = paths[i];
+            cout << path << endl;
+            scx::Dir::WalkDir(
+                path, 
+                [&newfiles, &path] (const string& name) { 
+                    if (name != "." && name != "..") {
+                        newfiles.push_back(name);
+                    }
+                }
+            );
+        }
+        cout << string(msg.size(), '-') << endl;
+    }
+
+    // update database
+    {
+        string msg = "Statistics:";
+        cout << msg << endl;
+
+        auto dbfiles = loaddb();
+
+        // drop obsolete
+        int ndec = 0;
+        set<string> fileset;
+        for (const auto& file: newfiles) {
+            fileset.insert(file);
+        }
+        auto pos = std::remove_if(
+            dbfiles.begin(), dbfiles.end(),
+            [&fileset, &ndec](const string& file) {
+                if (fileset.find(file) == fileset.end()) {
+                    ++ndec;
+                    return true;
+                }
+                return false;
+            }
+        );
+        dbfiles.erase(pos, dbfiles.end());
+
+        // append new
+        int ninc = 0;
+        fileset.clear();
+        for (const auto& file: dbfiles) {
+            fileset.insert(file);
+        }
+        for (const auto& file: newfiles) {
+            if (fileset.find(file) == fileset.end()) {
+                dbfiles.push_back(file);
+                ++ninc;
+            }
+        }
+
+        savedb(dbfiles);
+
+        cout << "+ " << ninc << endl;
+        cout << "- " << ndec << endl;
+        cout << "= " << dbfiles.size() << endl;
+        cout << string(msg.size(), '-') << endl;
+    }
+}
+
+ /* 
+  * usage: mrulauncher help
+  *
+  */
+auto help(int, char**) -> void
+{
+    cout << "Usage: " << endl;
+    cout << _myname << endl;
+    cout << "    Show menu on top of screen." << endl;
+    cout << _myname << " update <path1> <path2> ..." << endl;
+    cout << "    Update database, <path> is optional." << endl;
+}
+
+/*
+ * usage: mrulauncher
+ *
+ */
+static unordered_map<xcb_keycode_t, uint32_t> _codemap;
 
 auto keypress(xcb_key_press_event_t* e) -> void
 {
