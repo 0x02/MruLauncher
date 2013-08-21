@@ -1,0 +1,2 @@
+#!/bin/sh
+eb c++11 flag="-Wall -O2 -I/usr/local/include"  ldflag="-L/usr/local/lib -lxcb -lxcb-keysyms" $*

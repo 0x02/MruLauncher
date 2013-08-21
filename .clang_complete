@@ -1,0 +1,4 @@
+-I./scx
+-I/usr/local/include
+-stdlib=libc++
+-std=c++11
