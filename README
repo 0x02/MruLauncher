@@ -3,9 +3,9 @@ Furthermore, MruLauncher has better support for TAB completion.
 
 Usage:
 1.First time:
-  mrulanucher update
+  mrulauncher update
 2.Next time:
-  mrulanucher
+  mrulauncher
 
 Dependence (FreeBSD):
 c++11 compiler
