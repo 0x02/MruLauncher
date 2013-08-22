@@ -426,23 +426,31 @@ auto keypress(xcb_key_press_event_t* e) -> void
         break;
 
     case XK_Return: {
+        const auto& args = scx::String::Split(_barctx.txt(), ' ');
+        if (args.empty())
+            break;
+
         for (size_t i = 0; i < _cmds.size(); ++i) {
             const auto cmd = _cmds[i]; // need copy
-            if (cmd == _barctx.txt()) {
-                _cmds.erase(_cmds.begin()+i);
-                _cmds.insert(_cmds.begin(), cmd);
-                savedb(_cmds);
+            if (cmd != args[0]) continue;
 
-                _xcbctx.restorefocus();
-                _xcbctx.quit();
+            _cmds.erase(_cmds.begin()+i);
+            _cmds.insert(_cmds.begin(), cmd);
+            savedb(_cmds);
 
-                char cmdbuf[100];
-                bzero(cmdbuf, sizeof(cmdbuf));
-                memcpy(cmdbuf, cmd.data(), cmd.size());
-                char* const argv[] = { cmdbuf, nullptr };
-                execvp(cmdbuf,  argv);
-                exit(0);
+            _xcbctx.restorefocus();
+            _xcbctx.quit();
+
+            char** const argv = new char*[args.size() + 1];
+            for (size_t i = 0; i < args.size(); ++i) {
+                const auto arg = args[i];
+                argv[i] = new char[arg.size()+1];
+                memcpy(argv[i], arg.data(), arg.size());
+                argv[i][arg.size()] = '\0';
             }
+            argv[args.size()] = nullptr;
+            execvp(argv[0],  argv);
+            exit(-1);
         }
     }
         break;
