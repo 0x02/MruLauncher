@@ -567,7 +567,6 @@ auto show() -> void
 
         switch (e->response_type & ~0x80) {
         case XCB_EXPOSE: {
-            cout << "exp" << endl;
         }
             break;
 
@@ -579,7 +578,6 @@ auto show() -> void
                                  values);
             xcb_flush(_xcbctx.conn);
             */
-            cout << "vis" << endl;
         }
             break;
 
