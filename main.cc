@@ -30,7 +30,7 @@ static cmd_list_t _cmds;
 auto dbpath() -> string
 {
     auto path = scx::Env::Get("HOME") + "/";
-    auto dir = path + ".cache/";
+    auto dir = path + ".config/";
     auto info = scx::FileInfo(dir);
     if (info.Exists()) {
         if (info.Type() != scx::FileType::Directory)
