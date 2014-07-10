@@ -524,7 +524,8 @@ auto show() -> void
     mask = XCB_CW_BACK_PIXEL | XCB_CW_OVERRIDE_REDIRECT | XCB_CW_EVENT_MASK;
     values[0] = _xcbctx.scrn->black_pixel;
     values[1] = 1;
-    values[2] = XCB_EVENT_MASK_EXPOSURE | XCB_EVENT_MASK_KEY_PRESS | XCB_EVENT_MASK_VISIBILITY_CHANGE;
+    values[2] = XCB_EVENT_MASK_FOCUS_CHANGE | XCB_EVENT_MASK_KEY_PRESS |
+        XCB_EVENT_MASK_EXPOSURE | XCB_EVENT_MASK_VISIBILITY_CHANGE;
 
     xcb_create_window(_xcbctx.conn,
                       _xcbctx.scrn->root_depth,
@@ -585,6 +586,12 @@ auto show() -> void
         case XCB_KEY_PRESS: {
             auto ke = reinterpret_cast<xcb_key_press_event_t*>(e);
             keypress(ke);
+        }
+            break;
+
+        // if we lost focus, let's suicide
+        case XCB_FOCUS_OUT: {
+            exit(0);
         }
             break;
         }
